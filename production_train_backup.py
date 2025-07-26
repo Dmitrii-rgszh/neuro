@@ -132,8 +132,7 @@ class SentimentModelGPU(nn.Module):
             config["hidden_dim"],
             batch_first=True,
             bidirectional=True,
-            num_layers=2,
-            dropout=0.3
+            dropout=0.3 if config["epochs"] > 1 else 0
         )
         
         self.lstm2 = nn.LSTM(
@@ -141,8 +140,7 @@ class SentimentModelGPU(nn.Module):
             config["hidden_dim"],
             batch_first=True,
             bidirectional=True,
-            num_layers=2,
-            dropout=0.3,
+            dropout=0.3 if config["epochs"] > 1 else 0
         )
         
         # Attention механизм
@@ -159,7 +157,7 @@ class SentimentModelGPU(nn.Module):
         self.conv3 = nn.Conv1d(128, 64, kernel_size=3, padding=1)
         
         # Полносвязные слои
-        self.fc1 = nn.Linear(config["hidden_dim"] * 2 * 2 + 64, 512)  # Исправлено: 512*2 + 64 = 1088
+        self.fc1 = nn.Linear(config["hidden_dim"] * 2 + 64, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 128)
         self.fc4 = nn.Linear(128, config["num_classes"])
