@@ -1,6 +1,7 @@
 """
 Улучшенная конфигурация для высокоточного анализа настроений
 """
+import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -257,3 +258,74 @@ AB_TESTING_CONFIG = {
 MODEL_PATH = MODEL_PATHS["main_model"]
 TOKENIZER_PATH = MODEL_PATHS["tokenizer"]
 LABEL_ENCODER_PATH = MODEL_PATHS["label_encoder"]
+
+# =============================================================================
+# ДОПОЛНИТЕЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ PRODUCTION_TRAIN.PY
+# =============================================================================
+
+# Источники данных
+DATA_SOURCES = {
+    "rusentiment": {
+        "urls": [
+            "http://text-machine.cs.uml.edu/projects/rusentiment/rusentiment_random_posts.csv",
+            "https://raw.githubusercontent.com/text-machine-lab/rusentiment/master/Dataset/rusentiment_random_posts.csv"
+        ],
+        "enabled": True,
+        "weight": 1.0
+    },
+    "synthetic": {
+        "enabled": True,
+        "weight": 0.7,
+        "samples": 50000
+    }
+}
+
+# Дополнительные пути для моделей
+MODEL_PATHS = {
+    "main_model": MODEL_PATH,
+    "lstm_model": MODELS_DIR / "lstm_sentiment.h5",
+    "cnn_lstm_model": MODELS_DIR / "cnn_lstm_sentiment.h5", 
+    "transformer_model": MODELS_DIR / "transformer_sentiment.h5",
+    "ensemble_model": MODELS_DIR / "ensemble_sentiment.h5",
+    "tokenizer": TOKENIZER_PATH,
+    "label_encoder": LABEL_ENCODER_PATH
+}
+
+# Конфигурация валидации
+VALIDATION_CONFIG = {
+    "cross_validation_folds": 5,
+    "test_size": 0.2,
+    "validation_size": 0.15,
+    "stratify": True,
+    "random_state": 42,
+    "target_accuracy": 0.90,
+    "target_f1_score": 0.88,
+    "min_class_precision": 0.85
+}
+
+# Конфигурация для реального времени
+REALTIME_CONFIG = {
+    "batch_prediction": True,
+    "max_batch_size": 100,
+    "prediction_timeout": 5.0,
+    "confidence_threshold": 0.7,
+    "fallback_prediction": "neutral",
+    "cache_predictions": True,
+    "cache_size": 10000,
+    "cache_ttl": 3600
+}
+
+# Конфигурация токенизатора
+TOKENIZER_CONFIG = {
+    "num_words": MODEL_CONFIG["max_features"],
+    "oov_token": "<UNK>",
+    "filters": '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
+    "lower": TEXT_PREPROCESSING["lowercase"],
+    "split": ' ',
+    "char_level": False
+}
+
+# Псевдонимы для обратной совместимости
+enhanced_config = sys.modules[__name__]
+enhanced_data_loader = data_loader
+enhanced_model = model

@@ -509,7 +509,7 @@ class EnhancedDataLoader:
         
         # Предобработка текстов
         print("🔄 Предобработка текстов...")
-        df['processed_text'] = df['text'].progress_apply(self.preprocess_text)
+        df['processed_text'] = df['text'].apply(self.preprocess_text)
         
         # Удаление пустых строк
         df = df[df['processed_text'].str.len() > 0]
