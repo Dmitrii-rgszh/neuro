@@ -18,12 +18,12 @@ import json
 # Добавляем путь к модулям
 sys.path.append('src')
 
-from enhanced_config import (
+from config import (
     MODEL_CONFIG, MODEL_PATHS, TOKENIZER_CONFIG, VALIDATION_CONFIG,
     PROCESSED_DATA_DIR, DATA_SOURCES
 )
-from enhanced_data_loader import EnhancedDataLoader
-from enhanced_model import AdvancedSentimentTrainer, SentimentModelEnsemble
+from data_loader import EnhancedDataLoader
+from model import SentimentModelEnsemble, AdvancedSentimentTrainer
 
 
 class ProductionTrainer:
@@ -179,28 +179,51 @@ class ProductionTrainer:
         print("🚀 ОБУЧЕНИЕ ПРОДАКШН МОДЕЛЕЙ")
         print("="*60)
         
-        # Настройка тренера
-        self.advanced_trainer.tokenizer = self.tokenizer
-        self.advanced_trainer.label_encoder = self.label_encoder
+        # Создание тренера
+        from model import SentimentModelEnsemble
+        vocab_size = len(self.tokenizer.word_index) + 1
         
-        # Запуск полного обучения
-        start_time = datetime.now()
+        # Создание ансамбля моделей
+        ensemble = SentimentModelEnsemble(vocab_size=vocab_size)
+        ensemble.build_all_models()
         
-        training_history, test_results, validation_results = self.advanced_trainer.train_production_model(
-            X_train, y_train, X_val, y_val, X_test, y_test
-        )
+        # Обучение всех моделей
+        print("\n🎯 Обучение ансамбля моделей...")
+        histories = ensemble.train_ensemble(X_train, y_train, X_val, y_val)
         
-        end_time = datetime.now()
-        training_duration = end_time - start_time
+        # Оценка на тестовых данных
+        print("\n📊 Оценка на тестовых данных...")
+        test_results = ensemble.evaluate_ensemble(X_test, y_test)
         
-        print(f"\n⏱️ Время обучения: {training_duration}")
+        # Валидация качества
+        validation_results = {}
+        for model_name, model in ensemble.models.items():
+            predictions = model.predict(X_test, verbose=0)
+            predicted_classes = np.argmax(predictions, axis=1)
+            
+            from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+            
+            accuracy = accuracy_score(y_test, predicted_classes)
+            f1 = f1_score(y_test, predicted_classes, average='weighted')
+            precision = precision_score(y_test, predicted_classes, average='weighted')
+            recall = recall_score(y_test, predicted_classes, average='weighted')
+            
+            validation_results[model_name] = {
+                'accuracy': accuracy,
+                'f1_score': f1,
+                'precision': precision,
+                'recall': recall,
+                'quality_passed': accuracy >= VALIDATION_CONFIG["target_accuracy"]
+            }
         
-        # Сохранение результатов
+        # Сохранение моделей
+        ensemble.save_all_models()
+        
         self.final_results = {
-            'training_history': training_history,
+            'training_history': histories,
             'test_results': test_results,
             'validation_results': validation_results,
-            'training_duration': str(training_duration),
+            'training_duration': str(datetime.now() - datetime.now()),
             'best_model': self._find_best_model(validation_results)
         }
         
@@ -245,15 +268,23 @@ class ProductionTrainer:
             'tokenizer_config': TOKENIZER_CONFIG,
             'vocab_size': len(self.tokenizer.word_index) + 1,
             'class_names': MODEL_CONFIG["class_names"],
-            'training_timestamp': datetime.now().isoformat()
+            'training_timestamp': datetime.now().isoformat(),
+            'final_results': self.final_results
         }
         
         with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, ensure_ascii=False, indent=2)
+            # Конвертация numpy типов
+            def convert_numpy(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return obj
+            
+            json.dump(config_data, f, ensure_ascii=False, indent=2, default=convert_numpy)
         print(f"✅ Конфигурация сохранена: {config_path}")
-        
-        # Генерация отчета
-        report = self.advanced_trainer.generate_training_report()
         
         print("\n📄 Артефакты готовы для продакшна!")
     

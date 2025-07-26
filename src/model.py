@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import List, Dict, Tuple
 import joblib
 
-from enhanced_config import MODEL_CONFIG, MODEL_PATHS, VALIDATION_CONFIG
+from config import MODEL_CONFIG, MODEL_PATHS, VALIDATION_CONFIG
 
 
 class AttentionLayer(layers.Layer):
@@ -322,13 +322,7 @@ class SentimentModelEnsemble:
         model.compile(
             optimizer=optimizer,
             loss='sparse_categorical_crossentropy',
-            metrics=[
-                'accuracy',
-                keras.metrics.SparseCategoricalAccuracy(name='acc'),
-                keras.metrics.SparseTopKCategoricalAccuracy(k=2, name='top2_acc'),
-                keras.metrics.Precision(name='precision'),
-                keras.metrics.Recall(name='recall')
-            ]
+            metrics=['accuracy']
         )
     
     def get_callbacks(self, model_name: str) -> List:
@@ -454,6 +448,21 @@ class SentimentModelEnsemble:
         
         # Оценка ансамбля
         if self.ensemble_model:
+            print(f"\n🎯 Оценка ансамбля:")
+            metrics = self.ensemble_model.evaluate(X_test, y_test, verbose=0)
+            results["ensemble"] = dict(zip(self.ensemble_model.metrics_names, metrics))
+            print(f"Точность ансамбля: {results['ensemble']['accuracy']:.4f}")
+        
+        return results
+    
+    def save_all_models(self):
+        """Сохранение всех моделей"""
+        for name, model in self.models.items():
+            model_path = MODEL_PATHS[f"{name}_model"]
+            model.save(str(model_path))
+            print(f"💾 {name} модель сохранена: {model_path}")
+        
+        if self.ensemble_model:
             ensemble_path = MODEL_PATHS["ensemble_model"]
             self.ensemble_model.save(str(ensemble_path))
             print(f"💾 Ансамбль сохранен: {ensemble_path}")
@@ -538,9 +547,12 @@ class AdvancedSentimentTrainer:
         def get_synonyms(word):
             """Получение синонимов слова"""
             synonyms = set()
-            for syn in wordnet.synsets(word, lang='rus'):
-                for lemma in syn.lemmas(lang='rus'):
-                    synonyms.add(lemma.name().replace('_', ' '))
+            try:
+                for syn in wordnet.synsets(word, lang='rus'):
+                    for lemma in syn.lemmas(lang='rus'):
+                        synonyms.add(lemma.name().replace('_', ' '))
+            except:
+                pass
             return list(synonyms)
         
         def synonym_replacement(text, n=1):
@@ -566,9 +578,10 @@ class AdvancedSentimentTrainer:
             """Случайная вставка слов"""
             words = text.split()
             for _ in range(n):
-                new_word = random.choice(words)
-                random_idx = random.randint(0, len(words))
-                words.insert(random_idx, new_word)
+                if words:
+                    new_word = random.choice(words)
+                    random_idx = random.randint(0, len(words))
+                    words.insert(random_idx, new_word)
             return ' '.join(words)
         
         def random_swap(text, n=1):
@@ -694,8 +707,8 @@ class AdvancedSentimentTrainer:
         
         accuracy = accuracy_score(y_test, predicted_classes)
         f1 = f1_score(y_test, predicted_classes, average='weighted')
-        precision = precision_score(y_test, predicted_classes, average='weighted')
-        recall = recall_score(y_test, predicted_classes, average='weighted')
+        precision = precision_score(y_test, predicted_classes, average='weighted', zero_division=0)
+        recall = recall_score(y_test, predicted_classes, average='weighted', zero_division=0)
         
         # Проверка соответствия целевым показателям
         quality_checks = {
@@ -789,7 +802,7 @@ class AdvancedSentimentTrainer:
         report = {
             "training_timestamp": timestamp,
             "model_config": MODEL_CONFIG,
-            "training_history": self.training_history,
+            "training_history": str(self.training_history),
             "validation_results": self.validation_results,
             "best_model": max(
                 self.validation_results.items(),
@@ -834,19 +847,4 @@ if __name__ == "__main__":
     # Генерация отчета
     # report = trainer.generate_training_report()
     
-    print("✅ Улучшенная архитектура модели готова к использованию!")model:
-            print(f"\n🎯 Оценка ансамбля:")
-            metrics = self.ensemble_model.evaluate(X_test, y_test, verbose=0)
-            results["ensemble"] = dict(zip(self.ensemble_model.metrics_names, metrics))
-            print(f"Точность ансамбля: {results['ensemble']['accuracy']:.4f}")
-        
-        return results
-    
-    def save_all_models(self):
-        """Сохранение всех моделей"""
-        for name, model in self.models.items():
-            model_path = MODEL_PATHS[f"{name}_model"]
-            model.save(str(model_path))
-            print(f"💾 {name} модель сохранена: {model_path}")
-        
-        if self.ensemble_
+    print("✅ Улучшенная архитектура модели готова к использованию!")

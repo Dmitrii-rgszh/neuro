@@ -327,5 +327,8 @@ TOKENIZER_CONFIG = {
 
 # Псевдонимы для обратной совместимости
 enhanced_config = sys.modules[__name__]
-enhanced_data_loader = data_loader
-enhanced_model = model
+
+# Экспорт основных путей для обратной совместимости
+MODEL_PATH = MODEL_PATHS["main_model"]
+TOKENIZER_PATH = MODEL_PATHS["tokenizer"]
+LABEL_ENCODER_PATH = MODEL_PATHS["label_encoder"]
