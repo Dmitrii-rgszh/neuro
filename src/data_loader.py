@@ -1,5 +1,5 @@
 """
-Загрузка и подготовка данных для обучения модели
+Расширенная загрузка данных с множественными источниками
 """
 import os
 import re
@@ -10,6 +10,7 @@ from typing import Tuple, List
 import requests
 import zipfile
 from tqdm import tqdm
+import gdown
 
 import nltk
 from sklearn.model_selection import train_test_split
@@ -23,7 +24,6 @@ nltk.download('punkt', quiet=True)
 nltk.download('wordnet', quiet=True)
 from nltk.corpus import stopwords
 
-# Инициализация
 try:
     russian_stopwords = set(stopwords.words('russian'))
 except:
@@ -32,18 +32,19 @@ except:
     russian_stopwords = set(stopwords.words('russian'))
 
 
-class DataLoader:
-    """Класс для загрузки и подготовки данных"""
+class EnhancedDataLoader:
+    """Расширенный класс для загрузки данных из множественных источников"""
     
     def __init__(self):
         self.label_encoder = LabelEncoder()
+        self.datasets = []
         
     def download_rusentiment(self):
         """Загрузка датасета RuSentiment"""
-        # Альтернативные URL для датасета
         urls = [
             "http://text-machine.cs.uml.edu/projects/rusentiment/rusentiment_random_posts.csv",
-            "https://raw.githubusercontent.com/text-machine-lab/rusentiment/master/Dataset/rusentiment_random_posts.csv"
+            "https://raw.githubusercontent.com/text-machine-lab/rusentiment/master/Dataset/rusentiment_random_posts.csv",
+            "https://github.com/text-machine-lab/rusentiment/raw/master/Dataset/rusentiment_random_posts.csv"
         ]
         
         filepath = RAW_DATA_DIR / "rusentiment.csv"
@@ -57,28 +58,408 @@ class DataLoader:
                     if response.status_code == 200:
                         with open(filepath, 'wb') as f:
                             f.write(response.content)
-                        print("Датасет загружен!")
+                        print("✅ RuSentiment загружен!")
                         break
                 except Exception as e:
-                    print(f"Ошибка загрузки с {url}: {e}")
+                    print(f"❌ Ошибка загрузки с {url}: {e}")
                     continue
             else:
-                print("Не удалось загрузить датасет с указанных URL")
+                print("⚠️ Не удалось загрузить RuSentiment")
                 return None
         
         return filepath
-    
-    def load_custom_dataset(self, filepath: str) -> pd.DataFrame:
-        """Загрузка пользовательского датасета"""
-        if filepath.endswith('.csv'):
-            return pd.read_csv(filepath)
-        elif filepath.endswith('.json'):
-            return pd.read_json(filepath)
-        else:
-            raise ValueError("Поддерживаются только CSV и JSON файлы")
-    
+
+    def download_russian_twitter_corpus(self):
+        """Загрузка Russian Twitter Corpus"""
+        # Заглушка - требует регистрации
+        print("📱 Russian Twitter Corpus требует регистрации на сайте")
+        print("   Доступен по адресу: http://study.mokoron.com/")
+        return None
+
+    def download_linis_crowd(self):
+        """Загрузка LINIS Crowd dataset"""
+        url = "https://github.com/nicolay-r/RuSentRel/raw/master/data/linis_crowd.csv"
+        filepath = RAW_DATA_DIR / "linis_crowd.csv"
+        
+        if not filepath.exists():
+            try:
+                print("📊 Загрузка LINIS Crowd...")
+                response = requests.get(url, timeout=30)
+                if response.status_code == 200:
+                    with open(filepath, 'wb') as f:
+                        f.write(response.content)
+                    print("✅ LINIS Crowd загружен!")
+                    return filepath
+            except Exception as e:
+                print(f"❌ Ошибка загрузки LINIS Crowd: {e}")
+        
+        return filepath if filepath.exists() else None
+
+    def download_kaggle_russian_news(self):
+        """Загрузка русских новостей с Kaggle (требует API ключ)"""
+        try:
+            import kaggle
+            filepath = RAW_DATA_DIR / "russian_news.csv"
+            
+            if not filepath.exists():
+                print("📰 Загрузка русских новостей с Kaggle...")
+                kaggle.api.dataset_download_files(
+                    'blackmoon/russian-language-toxic-comments',
+                    path=str(RAW_DATA_DIR),
+                    unzip=True
+                )
+                print("✅ Kaggle dataset загружен!")
+            
+            return filepath if filepath.exists() else None
+            
+        except Exception as e:
+            print(f"⚠️ Kaggle API недоступен: {e}")
+            print("   Установите: pip install kaggle")
+            print("   Настройте API ключ: https://github.com/Kaggle/kaggle-api")
+            return None
+
+    def load_rutweetcorp(self):
+        """Загрузка RuTweetCorp (если доступен)"""
+        filepath = RAW_DATA_DIR / "rutweetcorp.csv"
+        
+        if filepath.exists():
+            try:
+                df = pd.read_csv(filepath, encoding='utf-8')
+                print(f"✅ RuTweetCorp загружен: {len(df)} записей")
+                return df
+            except Exception as e:
+                print(f"❌ Ошибка загрузки RuTweetCorp: {e}")
+        
+        return None
+
+    def create_extended_synthetic_dataset(self, num_samples: int = 50000) -> pd.DataFrame:
+        """Создание расширенного синтетического датасета"""
+        print(f"🔄 Создание расширенного синтетического датасета ({num_samples} примеров)...")
+        
+        # Расширенные шаблоны
+        positive_patterns = {
+            "reviews": [
+                "Отличный {product}! Всем рекомендую купить.",
+                "Превосходное качество {product}. Очень доволен покупкой.",
+                "Лучший {product} который я когда-либо {action}!",
+                "Супер {product}! Стоит каждой копейки.",
+                "Великолепный {product}. Буду заказывать еще.",
+                "Потрясающий {product}! Превзошел все ожидания.",
+                "Замечательный {product}. Спасибо продавцу!",
+                "Идеальный {product} для {purpose}. Рекомендую!",
+                "Восхитительный {product}! Качество на высоте.",
+                "Прекрасный {product}. Очень быстрая доставка."
+            ],
+            "emotions": [
+                "Сегодня {feeling}! Все получается отлично.",
+                "Какой {adj} день! Настроение {mood}.",
+                "Очень {feeling} результатом. Все супер!",
+                "Прекрасное {feeling}! Жизнь удалась.",
+                "Сегодня особенно {feeling}. Все идет как надо.",
+                "Отличное {feeling}! Солнце светит ярко.",
+                "Замечательное {feeling} от {activity}.",
+                "Восхитительное {feeling}! Спасибо всем.",
+                "Потрясающее {feeling} от проделанной работы.",
+                "Великолепное {feeling}! Так держать!"
+            ],
+            "services": [
+                "Отличный сервис в {place}. Персонал {adj}.",
+                "Супер обслуживание! Официант был {adj}.",
+                "Прекрасный {service}. Буду обращаться еще.",
+                "Качественный {service} по доступной цене.",
+                "Быстрый и {adj} {service}. Рекомендую!",
+                "Профессиональный {service}. Все на высшем уровне.",
+                "Отзывчивый персонал и {adj} {service}.",
+                "Удобный {service} с {adj} интерфейсом.",
+                "Надежный {service}. Пользуюсь уже давно.",
+                "Современный {service} с {adj} поддержкой."
+            ]
+        }
+        
+        negative_patterns = {
+            "reviews": [
+                "Ужасный {product}! Не рекомендую никому.",
+                "Отвратительное качество {product}. Деньги на ветер.",
+                "Худший {product} который я {action}. Кошмар!",
+                "Провальный {product}. Полное разочарование.",
+                "Неприемлемый {product}. Верну обратно.",
+                "Безобразный {product}! Как такое можно продавать?",
+                "Никуда не годный {product}. Не покупайте!",
+                "Бракованный {product}. Потерянные деньги.",
+                "Некачественный {product}. Обман покупателей!",
+                "Поломанный {product}. Ужасная работа магазина."
+            ],
+            "emotions": [
+                "Сегодня {feeling}. Все идет не так.",
+                "Ужасное {feeling}! День не задался.",
+                "Очень {feeling} результатом. Все плохо.",
+                "Депрессивное {feeling} от {activity}.",
+                "Сегодня особенно {feeling}. Ничего не получается.",
+                "Печальное {feeling} от происходящего.",
+                "Расстроенное {feeling} из-за неудач.",
+                "Болезненное {feeling} от потерь.",
+                "Мрачное {feeling} на душе.",
+                "Тяжелое {feeling} весь день."
+            ],
+            "services": [
+                "Ужасный сервис в {place}. Персонал {adj}.",
+                "Отвратительное обслуживание! Официант был {adj}.",
+                "Провальный {service}. Больше не обращусь.",
+                "Некачественный {service} за большие деньги.",
+                "Медленный и {adj} {service}. Не рекомендую!",
+                "Непрофессиональный {service}. Все на низком уровне.",
+                "Грубый персонал и {adj} {service}.",
+                "Неудобный {service} с {adj} интерфейсом.",
+                "Ненадежный {service}. Постоянные сбои.",
+                "Устаревший {service} с {adj} поддержкой."
+            ]
+        }
+        
+        neutral_patterns = [
+            "Обычный {product}. Ничего особенного, но пойдет.",
+            "Стандартное качество {product}. Соответствует цене.",
+            "Средний {product}. Есть плюсы и минусы.",
+            "Приемлемый {product} для своих задач.",
+            "Нормальный {product}. Без излишеств, но работает.",
+            "Типичный {product} в своей категории.",
+            "Неплохой {product}, но можно найти лучше.",
+            "Удовлетворительный {product} за свои деньги.",
+            "Обыкновенный {product}. Справляется с задачами.",
+            "Рядовой {product}. Ожидания оправдались."
+        ]
+        
+        # Словари для подстановок
+        products = [
+            "товар", "продукт", "телефон", "ноутбук", "планшет", "наушники",
+            "книга", "фильм", "игра", "приложение", "сайт", "сервис",
+            "ресторан", "кафе", "отель", "магазин", "курс", "программа"
+        ]
+        
+        positive_adj = [
+            "отличный", "превосходный", "замечательный", "великолепный",
+            "потрясающий", "восхитительный", "прекрасный", "идеальный",
+            "профессиональный", "качественный", "быстрый", "удобный"
+        ]
+        
+        negative_adj = [
+            "ужасный", "отвратительный", "провальный", "неприемлемый",
+            "безобразный", "некачественный", "медленный", "неудобный",
+            "грубый", "непрофессиональный", "ненадежный", "устаревший"
+        ]
+        
+        positive_feelings = [
+            "радуюсь", "доволен", "счастлив", "восхищен", "вдохновлен",
+            "воодушевлен", "благодарен", "удовлетворен", "взволнован"
+        ]
+        
+        negative_feelings = [
+            "расстроен", "разочарован", "огорчен", "раздражен", "недоволен",
+            "возмущен", "обижен", "злюсь", "грущу", "печалюсь"
+        ]
+        
+        services = [
+            "сервис", "обслуживание", "поддержка", "доставка", "ремонт",
+            "консультация", "установка", "настройка", "обучение"
+        ]
+        
+        places = [
+            "ресторане", "кафе", "магазине", "салоне", "банке", "поликлинике",
+            "офисе", "мастерской", "центре", "компании"
+        ]
+        
+        activities = [
+            "работы", "учебы", "покупки", "путешествия", "отдыха",
+            "тренировки", "встречи", "проекта", "мероприятия"
+        ]
+        
+        purposes = [
+            "работы", "дома", "учебы", "отдыха", "путешествий",
+            "спорта", "хобби", "бизнеса", "развлечений"
+        ]
+        
+        actions = ["покупал", "заказывал", "использовал", "пробовал", "тестировал"]
+        moods = ["отличное", "прекрасное", "замечательное", "великолепное"]
+        
+        data = []
+        samples_per_class = num_samples // 3
+        
+        # Генерация позитивных примеров
+        for _ in range(samples_per_class):
+            category = np.random.choice(list(positive_patterns.keys()))
+            template = np.random.choice(positive_patterns[category])
+            
+            text = template.format(
+                product=np.random.choice(products),
+                adj=np.random.choice(positive_adj),
+                feeling=np.random.choice(positive_feelings),
+                mood=np.random.choice(moods),
+                service=np.random.choice(services),
+                place=np.random.choice(places),
+                activity=np.random.choice(activities),
+                purpose=np.random.choice(purposes),
+                action=np.random.choice(actions)
+            )
+            
+            data.append({"text": text, "label": "positive"})
+        
+        # Генерация негативных примеров
+        for _ in range(samples_per_class):
+            category = np.random.choice(list(negative_patterns.keys()))
+            template = np.random.choice(negative_patterns[category])
+            
+            text = template.format(
+                product=np.random.choice(products),
+                adj=np.random.choice(negative_adj),
+                feeling=np.random.choice(negative_feelings),
+                service=np.random.choice(services),
+                place=np.random.choice(places),
+                activity=np.random.choice(activities)
+            )
+            
+            data.append({"text": text, "label": "negative"})
+        
+        # Генерация нейтральных примеров
+        for _ in range(num_samples - 2 * samples_per_class):
+            template = np.random.choice(neutral_patterns)
+            text = template.format(product=np.random.choice(products))
+            data.append({"text": text, "label": "neutral"})
+        
+        df = pd.DataFrame(data)
+        return df.sample(frac=1).reset_index(drop=True)
+
+    def load_all_available_datasets(self) -> pd.DataFrame:
+        """Загрузка всех доступных датасетов"""
+        combined_data = []
+        
+        # 1. Попытка загрузить RuSentiment
+        rusentiment_path = self.download_rusentiment()
+        if rusentiment_path:
+            try:
+                encodings = ['utf-8', 'cp1251', 'latin1']
+                df = None
+                
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(rusentiment_path, encoding=encoding)
+                        print(f"✅ RuSentiment загружен ({len(df)} записей)")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                
+                if df is not None and len(df) > 0:
+                    # Обработка RuSentiment
+                    df = self._process_rusentiment(df)
+                    combined_data.append(df)
+                    
+            except Exception as e:
+                print(f"❌ Ошибка обработки RuSentiment: {e}")
+        
+        # 2. Попытка загрузить LINIS Crowd
+        linis_path = self.download_linis_crowd()
+        if linis_path:
+            try:
+                df = pd.read_csv(linis_path, encoding='utf-8')
+                df = self._process_linis_crowd(df)
+                if len(df) > 0:
+                    print(f"✅ LINIS Crowd добавлен ({len(df)} записей)")
+                    combined_data.append(df)
+            except Exception as e:
+                print(f"❌ Ошибка обработки LINIS Crowd: {e}")
+        
+        # 3. Попытка загрузить Kaggle данные
+        kaggle_path = self.download_kaggle_russian_news()
+        if kaggle_path:
+            try:
+                df = pd.read_csv(kaggle_path, encoding='utf-8')
+                df = self._process_kaggle_data(df)
+                if len(df) > 0:
+                    print(f"✅ Kaggle данные добавлены ({len(df)} записей)")
+                    combined_data.append(df)
+            except Exception as e:
+                print(f"❌ Ошибка обработки Kaggle данных: {e}")
+        
+        # 4. Создание синтетических данных
+        synthetic_size = 50000 if not combined_data else 20000
+        synthetic_df = self.create_extended_synthetic_dataset(synthetic_size)
+        print(f"✅ Синтетические данные созданы ({len(synthetic_df)} записей)")
+        combined_data.append(synthetic_df)
+        
+        # Объединение всех датасетов
+        if combined_data:
+            final_df = pd.concat(combined_data, ignore_index=True)
+            final_df = final_df.drop_duplicates(subset=['text']).reset_index(drop=True)
+            print(f"\n🎯 Итоговый датасет: {len(final_df)} уникальных записей")
+            
+            # Балансировка классов
+            final_df = self._balance_dataset(final_df)
+            
+            return final_df
+        
+        return self.create_extended_synthetic_dataset()
+
+    def _process_rusentiment(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Обработка датасета RuSentiment"""
+        # Поиск нужных колонок
+        text_cols = [col for col in df.columns if any(name in col.lower() for name in ['text', 'comment', 'post'])]
+        label_cols = [col for col in df.columns if any(name in col.lower() for name in ['label', 'sentiment', 'class'])]
+        
+        if text_cols and label_cols:
+            df = df[[text_cols[0], label_cols[0]]].copy()
+            df.columns = ['text', 'label']
+            
+            # Преобразование меток
+            df['label'] = df['label'].astype(str).str.lower()
+            df['label'] = df['label'].map({
+                'positive': 'positive', 'negative': 'negative', 'neutral': 'neutral',
+                'pos': 'positive', 'neg': 'negative', 'neu': 'neutral',
+                '1': 'positive', '0': 'neutral', '-1': 'negative',
+                'speech': 'neutral', 'skip': 'neutral'
+            }).fillna('neutral')
+            
+            return df[df['text'].notna() & (df['text'] != '')]
+        
+        return pd.DataFrame(columns=['text', 'label'])
+
+    def _process_linis_crowd(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Обработка датасета LINIS Crowd"""
+        if 'text' in df.columns and 'label' in df.columns:
+            df = df[['text', 'label']].copy()
+            df['label'] = df['label'].astype(str).str.lower()
+            return df[df['text'].notna() & (df['text'] != '')]
+        return pd.DataFrame(columns=['text', 'label'])
+
+    def _process_kaggle_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Обработка Kaggle данных"""
+        # Адаптировать под конкретную структуру Kaggle датасета
+        if 'comment' in df.columns and 'toxic' in df.columns:
+            df = df[['comment', 'toxic']].copy()
+            df.columns = ['text', 'label']
+            df['label'] = df['label'].map({1: 'negative', 0: 'neutral'})
+            return df[df['text'].notna() & (df['text'] != '')]
+        return pd.DataFrame(columns=['text', 'label'])
+
+    def _balance_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Балансировка датасета"""
+        label_counts = df['label'].value_counts()
+        min_count = label_counts.min()
+        
+        balanced_dfs = []
+        for label in ['positive', 'negative', 'neutral']:
+            label_df = df[df['label'] == label]
+            if len(label_df) > min_count:
+                label_df = label_df.sample(n=min_count, random_state=42)
+            balanced_dfs.append(label_df)
+        
+        balanced_df = pd.concat(balanced_dfs, ignore_index=True)
+        balanced_df = balanced_df.sample(frac=1, random_state=42).reset_index(drop=True)
+        
+        print(f"📊 Датасет сбалансирован:")
+        print(balanced_df['label'].value_counts())
+        
+        return balanced_df
+
     def preprocess_text(self, text: str) -> str:
-        """Предобработка текста"""
+        """Улучшенная предобработка текста"""
         if pd.isna(text):
             return ""
         
@@ -96,9 +477,12 @@ class DataLoader:
         if TEXT_PREPROCESSING["remove_emails"]:
             text = re.sub(r'\S+@\S+', '', text)
         
-        # Удаление чисел
+        # Удаление чисел (опционально)
         if TEXT_PREPROCESSING["remove_numbers"]:
             text = re.sub(r'\d+', '', text)
+        
+        # Удаление лишних пробелов
+        text = re.sub(r'\s+', ' ', text)
         
         # Удаление пунктуации (кроме эмодзи)
         if TEXT_PREPROCESSING["remove_punctuation"]:
@@ -106,234 +490,49 @@ class DataLoader:
         
         # Токенизация
         try:
-            tokens = nltk.word_tokenize(text)
+            tokens = nltk.word_tokenize(text, language='russian')
         except:
-            # Если не удается токенизировать, используем простое разделение
             tokens = text.split()
-        
-        # Простая нормализация вместо лемматизации
-        if TEXT_PREPROCESSING["lemmatize"] and tokens:
-            # Удаляем окончания для базовой нормализации
-            normalized_tokens = []
-            for token in tokens:
-                # Простое удаление типичных русских окончаний
-                if len(token) > 3:
-                    # Удаляем окончания: -ов, -ев, -ий, -ый, -ая, -ое, -ые и т.д.
-                    if token.endswith(('ов', 'ев', 'ий', 'ый', 'ая', 'ое', 'ые', 'ие', 
-                                     'ого', 'его', 'ому', 'ему', 'ом', 'ем', 'ой', 'ей',
-                                     'ую', 'юю', 'ая', 'яя', 'ое', 'ее', 'ые', 'ие')):
-                        token = token[:-2]
-                    elif token.endswith(('а', 'я', 'о', 'е', 'у', 'ю', 'ы', 'и')):
-                        token = token[:-1]
-                normalized_tokens.append(token)
-            tokens = normalized_tokens
         
         # Удаление стоп-слов
         if TEXT_PREPROCESSING["remove_stopwords"]:
             tokens = [token for token in tokens if token not in russian_stopwords and len(token) > 2]
         
         return ' '.join(tokens)
-    
-    def map_sentiment_to_3_classes(self, sentiment: str) -> str:
-        """Преобразование 5 классов sentiment в 3"""
-        mapping = {
-            'negative': 'negative',
-            'positive': 'positive',
-            'neutral': 'neutral',
-            'speech': 'neutral',
-            'skip': 'neutral'
-        }
-        return mapping.get(sentiment.lower(), 'neutral')
-    
-    def create_synthetic_dataset(self, num_samples: int = 10000) -> pd.DataFrame:
-        """Создание синтетического датасета для обучения"""
-        print("Создание синтетического датасета...")
+
+    def prepare_final_dataset(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Подготовка финального датасета"""
+        print("🚀 Начинаем подготовку расширенного датасета...")
         
-        # Примеры позитивных фраз
-        positive_templates = [
-            "Это просто {adj}! Я очень {feeling}!",
-            "{adj} продукт! Всем рекомендую!",
-            "Супер! Очень {feeling} покупкой!",
-            "Великолепно! {adj} качество!",
-            "Отличный сервис! {feeling}!",
-            "{adj}! Превзошло все ожидания!",
-            "Замечательный опыт! Буду {action} снова!",
-            "Лучшее, что я {action}! {adj}!",
-            "Очень {feeling}! Спасибо за {adj} работу!",
-            "Рекомендую всем! {adj} выбор!"
-        ]
-        positive_adj = ["великолепно", "замечательно", "отлично", "прекрасно", "восхитительно", 
-                       "потрясающе", "превосходно", "изумительно", "чудесно", "роскошно"]
-        positive_feeling = ["доволен", "рад", "счастлив", "восхищен", "впечатлен", 
-                           "удовлетворен", "воодушевлен", "благодарен"]
-        positive_action = ["покупать", "заказывать", "использовать", "брать", "пробовать"]
+        # Загрузка всех доступных данных
+        df = self.load_all_available_datasets()
         
-        # Примеры негативных фраз
-        negative_templates = [
-            "Это {adj}! Очень {feeling}!",
-            "{adj} качество! Не рекомендую!",
-            "Ужасно! {feeling} покупкой!",
-            "{adj} сервис! Больше не буду {action}!",
-            "Кошмар! {adj} опыт!",
-            "Отвратительно! {feeling}!",
-            "Худшее, что я {action}! {adj}!",
-            "Полное разочарование! {adj} товар!",
-            "Не советую никому! {feeling}!",
-            "Деньги на ветер! {adj}!"
-        ]
-        negative_adj = ["ужасно", "отвратительно", "плохо", "кошмарно", "неприемлемо", 
-                       "безобразно", "отвратительно", "никуда не годится", "провально"]
-        negative_feeling = ["разочарован", "расстроен", "недоволен", "возмущен", 
-                           "раздражен", "огорчен", "обманут", "зол"]
-        negative_action = ["покупать", "заказывать", "связываться", "брать", "обращаться"]
-        
-        # Примеры нейтральных фраз
-        neutral_templates = [
-            "Обычный продукт, ничего особенного",
-            "Нормально, как и ожидалось",
-            "Средне, есть плюсы и минусы",
-            "Пойдет, но можно найти лучше",
-            "Стандартное качество за свои деньги",
-            "Ничего выдающегося, обычный товар",
-            "Соответствует описанию, без сюрпризов",
-            "Неплохо, но есть к чему стремиться",
-            "Обычное обслуживание, без излишеств",
-            "Приемлемо для своей категории"
-        ]
-        
-        data = []
-        
-        # Генерация позитивных примеров
-        for _ in range(num_samples // 3):
-            template = np.random.choice(positive_templates)
-            text = template
-            if '{adj}' in template:
-                text = text.replace('{adj}', np.random.choice(positive_adj))
-            if '{feeling}' in template:
-                text = text.replace('{feeling}', np.random.choice(positive_feeling))
-            if '{action}' in template:
-                text = text.replace('{action}', np.random.choice(positive_action))
-            data.append({"text": text, "label": "positive"})
-        
-        # Генерация негативных примеров
-        for _ in range(num_samples // 3):
-            template = np.random.choice(negative_templates)
-            text = template
-            if '{adj}' in template:
-                text = text.replace('{adj}', np.random.choice(negative_adj))
-            if '{feeling}' in template:
-                text = text.replace('{feeling}', np.random.choice(negative_feeling))
-            if '{action}' in template:
-                text = text.replace('{action}', np.random.choice(negative_action))
-            data.append({"text": text, "label": "negative"})
-        
-        # Генерация нейтральных примеров
-        for _ in range(num_samples - 2 * (num_samples // 3)):
-            text = np.random.choice(neutral_templates)
-            data.append({"text": text, "label": "neutral"})
-        
-        # Перемешивание данных
-        df = pd.DataFrame(data)
-        df = df.sample(frac=1).reset_index(drop=True)
-        
-        print(f"Создан синтетический датасет с {len(df)} примерами")
-        return df
-    
-    def prepare_rusentiment_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Подготовка данных RuSentiment"""
-        try:
-            filepath = self.download_rusentiment()
-            
-            if filepath is None:
-                raise ValueError("Не удалось загрузить датасет")
-            
-            # Загрузка данных с разными кодировками
-            encodings = ['utf-8', 'cp1251', 'latin1']
-            df = None
-            
-            for encoding in encodings:
-                try:
-                    df = pd.read_csv(filepath, encoding=encoding)
-                    print(f"Датасет загружен с кодировкой {encoding}")
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if df is None:
-                raise ValueError("Не удалось прочитать датасет")
-            
-            # Проверка структуры датасета
-            print(f"Колонки в датасете: {df.columns.tolist()}")
-            print(f"Размер датасета: {len(df)} строк")
-            
-            # Определение правильных колонок
-            text_column = None
-            label_column = None
-            
-            # Поиск колонки с текстом
-            for col in ['text', 'Text', 'comment', 'review', 'message']:
-                if col in df.columns:
-                    text_column = col
-                    break
-            
-            # Поиск колонки с метками
-            for col in ['label', 'Label', 'sentiment', 'Sentiment', 'category']:
-                if col in df.columns:
-                    label_column = col
-                    break
-            
-            if text_column is None or label_column is None:
-                # Если стандартные имена не найдены, используем первые две колонки
-                if len(df.columns) >= 2:
-                    text_column = df.columns[0]
-                    label_column = df.columns[1]
-                    print(f"Используем колонки: текст='{text_column}', метка='{label_column}'")
-                else:
-                    raise ValueError("Не удалось определить структуру датасета")
-            
-            # Переименование для единообразия
-            df = df.rename(columns={text_column: 'text', label_column: 'label'})
-            
-        except Exception as e:
-            print(f"Ошибка при загрузке RuSentiment: {e}")
-            print("Используем синтетический датасет для обучения...")
-            df = self.create_synthetic_dataset(num_samples=15000)
-        
-        # Преобразование меток в строковый формат
-        df['label'] = df['label'].astype(str).str.lower()
-        
-        # Преобразование в 3 класса
-        df['sentiment_3'] = df['label'].apply(self.map_sentiment_to_3_classes)
-        
-        # Предобработка текста
-        print("Предобработка текстов...")
-        df['processed_text'] = df['text'].apply(self.preprocess_text)
+        # Предобработка текстов
+        print("🔄 Предобработка текстов...")
+        df['processed_text'] = df['text'].progress_apply(self.preprocess_text)
         
         # Удаление пустых строк
         df = df[df['processed_text'].str.len() > 0]
         
         # Кодирование меток
-        df['label_encoded'] = self.label_encoder.fit_transform(df['sentiment_3'])
+        df['label_encoded'] = self.label_encoder.fit_transform(df['label'])
         
-        # Разделение на обучающую и тестовую выборки
+        # Разделение на train/test
         train_df, test_df = train_test_split(
-            df[['processed_text', 'label_encoded', 'sentiment_3']], 
+            df[['text', 'processed_text', 'label_encoded', 'label']], 
             test_size=0.2, 
             random_state=42,
             stratify=df['label_encoded']
         )
         
+        print(f"\n✅ Финальная статистика:")
+        print(f"   Обучающая выборка: {len(train_df)} примеров")
+        print(f"   Тестовая выборка: {len(test_df)} примеров")
+        print(f"   Распределение в обучающей выборке:")
+        print(f"   {train_df['label'].value_counts()}")
+        
         return train_df, test_df
-    
-    def load_additional_datasets(self):
-        """Загрузка дополнительных датасетов для улучшения модели"""
-        datasets = []
-        
-        # Здесь можно добавить загрузку других датасетов
-        # Например, Russian Twitter Corpus, отзывы с маркетплейсов и т.д.
-        
-        return datasets
-    
+
     def save_processed_data(self, train_df: pd.DataFrame, test_df: pd.DataFrame):
         """Сохранение обработанных данных"""
         train_df.to_csv(PROCESSED_DATA_DIR / "train_data.csv", index=False)
@@ -342,24 +541,20 @@ class DataLoader:
         # Сохранение label encoder
         import joblib
         joblib.dump(self.label_encoder, PROCESSED_DATA_DIR / "label_encoder.pkl")
-        
-        # Также сохраним в основной директории моделей
         joblib.dump(self.label_encoder, LABEL_ENCODER_PATH)
         
-        print(f"Данные сохранены в {PROCESSED_DATA_DIR}")
-        print(f"Обучающая выборка: {len(train_df)} примеров")
-        print(f"Тестовая выборка: {len(test_df)} примеров")
-        print(f"Распределение классов в обучающей выборке:")
-        print(train_df['sentiment_3'].value_counts())
+        print(f"\n💾 Данные сохранены в {PROCESSED_DATA_DIR}")
 
 
 if __name__ == "__main__":
     # Инициализация tqdm для pandas
     tqdm.pandas()
     
-    # Загрузка и подготовка данных
-    loader = DataLoader()
-    train_df, test_df = loader.prepare_rusentiment_data()
+    # Создание расширенного загрузчика
+    loader = EnhancedDataLoader()
+    
+    # Подготовка данных
+    train_df, test_df = loader.prepare_final_dataset()
     
     # Сохранение
     loader.save_processed_data(train_df, test_df)
